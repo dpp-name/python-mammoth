@@ -517,8 +517,9 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         width = _extract_size_from_style("width", style)
         height = _extract_size_from_style("height", style)
         size = documents.Size(
-            width=_pt_to_pixel(width),
-            height=_pt_to_pixel(height))
+            width=str(_pt_to_pixel(width)),
+            height=str(_pt_to_pixel(height))
+        )
         return size
 
     def _pt_to_pixel(pt):
