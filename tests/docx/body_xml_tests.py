@@ -275,9 +275,9 @@ class RunTests(object):
         assert_equal(False, run.is_underline)
 
     @istest
-    def run_is_underlined_if_underline_element_is_present_without_val_attribute(self):
+    def run_is_not_underlined_if_underline_element_is_present_without_val_attribute(self):
         run = self._read_run_with_properties([xml_element("w:u")])
-        assert_equal(True, run.is_underline)
+        assert_equal(False, run.is_underline)
 
     @istest
     def run_is_not_underlined_if_underline_element_is_present_and_val_is_false(self):
@@ -410,10 +410,7 @@ class ComplexFieldTests(object):
 
     def _is_hyperlinked_run(self, **kwargs):
         return is_run(children=is_sequence(
-            is_hyperlink(
-                href=self._URI,
-                **kwargs
-            ),
+            is_hyperlink(**kwargs),
         ))
 
     @property
@@ -421,7 +418,7 @@ class ComplexFieldTests(object):
         return self._is_hyperlinked_run(children=[])
 
     @istest
-    def runs_in_a_complex_field_for_hyperlinks_are_read_as_hyperlinks(self):
+    def runs_in_a_complex_field_for_hyperlinks_without_switch_are_read_as_external_hyperlinks(self):
         element = xml_element("w:p", {}, [
             self._BEGIN_COMPLEX_FIELD,
             self._HYPERLINK_INSTRTEXT,
@@ -434,9 +431,37 @@ class ComplexFieldTests(object):
         assert_that(paragraph, is_paragraph(children=is_sequence(
             is_empty_run,
             self._is_empty_hyperlinked_run,
-            self._is_hyperlinked_run(children=is_sequence(
-                is_text("this is a hyperlink"),
-            )),
+            self._is_hyperlinked_run(
+                href=self._URI,
+                children=is_sequence(
+                    is_text("this is a hyperlink"),
+                ),
+            ),
+            is_empty_run,
+        )))
+
+    @istest
+    def runs_in_a_complex_field_for_hyperlinks_with_l_switch_are_read_as_internal_hyperlinks(self):
+        element = xml_element("w:p", {}, [
+            self._BEGIN_COMPLEX_FIELD,
+            xml_element("w:instrText", {}, [
+                xml_text(' HYPERLINK \\l "InternalLink"'),
+            ]),
+            self._SEPARATE_COMPLEX_FIELD,
+            _run_element_with_text("this is a hyperlink"),
+            self._END_COMPLEX_FIELD,
+        ])
+        paragraph = _read_and_get_document_xml_element(element)
+
+        assert_that(paragraph, is_paragraph(children=is_sequence(
+            is_empty_run,
+            self._is_empty_hyperlinked_run,
+            self._is_hyperlinked_run(
+                anchor="InternalLink",
+                children=is_sequence(
+                    is_text("this is a hyperlink"),
+                ),
+            ),
             is_empty_run,
         )))
 
@@ -479,9 +504,12 @@ class ComplexFieldTests(object):
         assert_that(paragraph, is_paragraph(children=is_sequence(
             is_empty_run,
             self._is_empty_hyperlinked_run,
-            self._is_hyperlinked_run(children=is_sequence(
-                is_text("this is a hyperlink"),
-            )),
+            self._is_hyperlinked_run(
+                href=self._URI,
+                children=is_sequence(
+                    is_text("this is a hyperlink"),
+                ),
+            ),
             is_empty_run,
         )))
 
@@ -508,9 +536,12 @@ class ComplexFieldTests(object):
             self._is_empty_hyperlinked_run,
             self._is_empty_hyperlinked_run,
             self._is_empty_hyperlinked_run,
-            self._is_hyperlinked_run(children=is_sequence(
-                is_text("this is a hyperlink"),
-            )),
+            self._is_hyperlinked_run(
+                href=self._URI,
+                children=is_sequence(
+                    is_text("this is a hyperlink"),
+                ),
+            ),
             is_empty_run,
         )))
 
@@ -536,9 +567,12 @@ class ComplexFieldTests(object):
             self._is_empty_hyperlinked_run,
             self._is_empty_hyperlinked_run,
             self._is_empty_hyperlinked_run,
-            self._is_hyperlinked_run(children=is_sequence(
-                is_text("John Doe"),
-            )),
+            self._is_hyperlinked_run(
+                href=self._URI,
+                children=is_sequence(
+                    is_text("John Doe"),
+                ),
+            ),
             self._is_empty_hyperlinked_run,
             is_empty_run,
         )))
@@ -561,9 +595,12 @@ class ComplexFieldTests(object):
             self._is_empty_hyperlinked_run,
             self._is_empty_hyperlinked_run,
             self._is_empty_hyperlinked_run,
-            self._is_hyperlinked_run(children=is_sequence(
-                is_text("this is a hyperlink"),
-            )),
+            self._is_hyperlinked_run(
+                href=self._URI,
+                children=is_sequence(
+                    is_text("this is a hyperlink"),
+                ),
+            ),
             is_empty_run,
         )))
 
@@ -1076,10 +1113,9 @@ class ImageTests(object):
 
 
     @istest
-    def alt_text_title_is_used_if_alt_text_description_is_blank(self):
+    def alt_text_title_is_used_if_alt_text_description_is_missing(self):
         drawing_element = _create_inline_image(
             blip=_embedded_blip(self.IMAGE_RELATIONSHIP_ID),
-            description=" ",
             title="It's a hat",
         )
 
@@ -1093,9 +1129,10 @@ class ImageTests(object):
 
 
     @istest
-    def alt_text_title_is_used_if_alt_text_description_is_missing(self):
+    def alt_text_title_is_used_if_alt_text_description_is_blank(self):
         drawing_element = _create_inline_image(
             blip=_embedded_blip(self.IMAGE_RELATIONSHIP_ID),
+            description=" ",
             title="It's a hat",
         )
 
@@ -1142,35 +1179,6 @@ class ImageTests(object):
 
     @istest
     @funk.with_mocks
-    def warning_if_unsupported_image_type(self, mocks):
-        drawing_element = _create_inline_image(
-            blip=_embedded_blip("rId5"),
-            description="It's a hat",
-        )
-
-        relationships = Relationships([
-            _image_relationship("rId5", "media/hat.emf"),
-        ])
-
-        docx_file = mocks.mock()
-        funk.allows(docx_file).open("word/media/hat.emf").returns(io.BytesIO(self.IMAGE_BYTES))
-
-        content_types = mocks.mock()
-        funk.allows(content_types).find_content_type("word/media/hat.emf").returns("image/x-emf")
-
-        result = _read_document_xml_element(
-            drawing_element,
-            content_types=content_types,
-            relationships=relationships,
-            docx_file=docx_file,
-        )
-        assert_equal("image/x-emf", result.value.content_type)
-        expected_warning = results.warning("Image of type image/x-emf is unlikely to display in web browsers")
-        assert_equal([expected_warning], result.messages)
-
-
-    @istest
-    @funk.with_mocks
     def can_read_linked_pictures(self, mocks):
         drawing_element = _create_inline_image(
             blip=_linked_blip("rId5"),
@@ -1199,6 +1207,64 @@ class ImageTests(object):
         assert_equal("image/png", image.content_type)
         with image.open() as image_file:
             assert_equal(self.IMAGE_BYTES, image_file.read())
+
+    @istest
+    def warning_if_blip_has_no_image_file(self):
+        drawing = _create_inline_image(
+            blip=xml_element("a:blip"),
+            description="It's a hat",
+        )
+
+        result = _read_document_xml_element(drawing)
+
+        assert_equal([results.warning("Could not find image file for a:blip element")], result.messages)
+        assert_equal(None, result.value)
+
+    @istest
+    @funk.with_mocks
+    def warning_if_unsupported_image_type(self, mocks):
+        drawing_element = _create_inline_image(
+            blip=_embedded_blip("rId5"),
+            description="It's a hat",
+        )
+
+        relationships = Relationships([
+            _image_relationship("rId5", "media/hat.emf"),
+        ])
+
+        docx_file = mocks.mock()
+        funk.allows(docx_file).open("word/media/hat.emf").returns(io.BytesIO(self.IMAGE_BYTES))
+
+        content_types = mocks.mock()
+        funk.allows(content_types).find_content_type("word/media/hat.emf").returns("image/x-emf")
+
+        result = _read_document_xml_element(
+            drawing_element,
+            content_types=content_types,
+            relationships=relationships,
+            docx_file=docx_file,
+        )
+        assert_equal("image/x-emf", result.value.content_type)
+        expected_warning = results.warning("Image of type image/x-emf is unlikely to display in web browsers")
+        assert_equal([expected_warning], result.messages)
+
+    @istest
+    def no_elements_created_if_image_cannot_be_found_in_w_drawing(self):
+        drawing = xml_element("w:drawing")
+
+        result = _read_document_xml_element(drawing)
+
+        assert_equal([], result.messages)
+        assert_equal(None, result.value)
+
+    @istest
+    def no_elements_created_if_image_cannot_be_found_in_wp_inline(self):
+        drawing = xml_element("wp:inline")
+
+        result = _read_document_xml_element(drawing)
+
+        assert_equal([], result.messages)
+        assert_equal(None, result.value)
 
 
 @istest

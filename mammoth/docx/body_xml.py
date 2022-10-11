@@ -98,11 +98,11 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         is_small_caps = read_boolean_element(properties.find_child("w:smallCaps"))
 
         def add_complex_field_hyperlink(children):
-            hyperlink_href = current_hyperlink_href()
-            if hyperlink_href is None:
+            hyperlink_kwargs = current_hyperlink_kwargs()
+            if hyperlink_kwargs is None:
                 return children
             else:
-                return [documents.hyperlink(href=hyperlink_href, children=children)]
+                return [documents.hyperlink(children=children, **hyperlink_kwargs)]
 
         return _ReadResult.map_results(
             _read_run_style(properties),
@@ -129,7 +129,7 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         return element and element.attributes.get("w:val") not in ["false", "0"]
 
     def read_underline_element(element):
-        return element and element.attributes.get("w:val") not in ["false", "0", "none"]
+        return element and element.attributes.get("w:val") not in [None, "false", "0", "none"]
 
     def paragraph(element):
         properties = element.find_child_or_null("w:pPr")
@@ -157,10 +157,10 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
     current_instr_text = []
     complex_field_stack = []
 
-    def current_hyperlink_href():
+    def current_hyperlink_kwargs():
         for complex_field in reversed(complex_field_stack):
             if isinstance(complex_field, complex_fields.Hyperlink):
-                return complex_field.href
+                return complex_field.kwargs
 
         return None
 
@@ -173,21 +173,25 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
             complex_field_stack.pop()
         elif fld_char_type == "separate":
             instr_text = "".join(current_instr_text)
-            hyperlink_href = parse_hyperlink_field_code(instr_text)
-            if hyperlink_href is None:
+            hyperlink_kwargs = parse_hyperlink_field_code(instr_text)
+            if hyperlink_kwargs is None:
                 complex_field = complex_fields.unknown
             else:
-                complex_field = complex_fields.hyperlink(hyperlink_href)
+                complex_field = complex_fields.hyperlink(hyperlink_kwargs)
             complex_field_stack.pop()
             complex_field_stack.append(complex_field)
         return _empty_result
 
     def parse_hyperlink_field_code(instr_text):
-        result = re.match(r'\s*HYPERLINK "(.*)"', instr_text)
-        if result is None:
-            return None
-        else:
-            return result.group(1)
+        external_link_result = re.match(r'\s*HYPERLINK "(.*)"', instr_text)
+        if external_link_result is not None:
+            return dict(href=external_link_result.group(1))
+
+        internal_link_result = re.match(r'\s*HYPERLINK\s+\\l\s+"(.*)"', instr_text)
+        if internal_link_result is not None:
+            return dict(anchor=internal_link_result.group(1))
+
+        return None
 
     def read_instr_text(element):
         current_instr_text.append(_inner_text(element))
@@ -445,10 +449,16 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         return _ReadResult.concat(lists.map(lambda blip: _read_blip(blip, alt_text, size), blips))
 
     def _read_blip(element, alt_text, size):
-        return _read_image(lambda: _find_blip_image(element), alt_text, size)
+        blip_image = _find_blip_image(element)
 
-    def _read_image(find_image, alt_text, size=None):
-        image_path, open_image = find_image()
+        if blip_image is None:
+            warning = results.warning("Could not find image file for a:blip element")
+            return _empty_result_with_message(warning)
+        else:
+            return _read_image(blip_image, alt_text, size)
+
+    def _read_image(image_file, alt_text, size=None):
+        image_path, open_image = image_file()
         content_type = content_types.find_content_type(image_path)
         image = documents.image(alt_text=alt_text, content_type=content_type, size=size, open=open_image)
 
@@ -466,6 +476,8 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
             return _find_embedded_image(embed_relationship_id)
         elif link_relationship_id is not None:
             return _find_linked_image(link_relationship_id)
+        else:
+            return None
 
     def _find_embedded_image(relationship_id):
         target = relationships.find_target_by_relationship_id(relationship_id)
@@ -519,7 +531,7 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
             return _empty_result_with_message(warning)
         else:
             title = element.attributes.get("o:title")
-            return _read_image(lambda: _find_embedded_image(relationship_id), title, style)
+            return _read_image(_find_embedded_image(relationship_id), title, style)
 
     def note_reference_reader(note_type):
         def note_reference(element):
