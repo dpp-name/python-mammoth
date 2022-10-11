@@ -458,7 +458,7 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
             return _read_image(blip_image, alt_text, size)
 
     def _read_image(image_file, alt_text, size=None):
-        image_path, open_image = image_file()
+        image_path, open_image = image_file
         content_type = content_types.find_content_type(image_path)
         image = documents.image(alt_text=alt_text, content_type=content_type, size=size, open=open_image)
 
