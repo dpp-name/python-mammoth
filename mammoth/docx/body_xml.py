@@ -516,8 +516,16 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         style = style_attribute.split(";")
         width = _extract_size_from_style("width", style)
         height = _extract_size_from_style("height", style)
-        size = documents.Size(width=width, height=height)
+        size = documents.Size(
+            width=_pt_to_pixel(width),
+            height=_pt_to_pixel(height))
         return size
+
+    def _pt_to_pixel(pt):
+        if 'pt' in pt:
+            pt = pt[:-2]
+            return int(round(float(pt) * (3 / 4)))
+        return pt
 
     def _extract_size_from_style(style_name, style):
         with_column = "{}:".format(style_name)
