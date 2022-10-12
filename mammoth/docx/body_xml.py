@@ -525,7 +525,6 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
     def _pt_to_pixel(pt):
         if 'pt' in pt:
             pt = pt[:-2]
-            return int(round(float(pt) * (3 / 4)))
         return pt
 
     def _extract_size_from_style(style_name, style):
