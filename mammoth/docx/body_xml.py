@@ -449,10 +449,13 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         else:
             alt_text = properties.get("title")
         dimensions = element.find_child_or_null("wp:extent").attributes
-        size = documents.Size(
-            width=str(_emu_to_pixel(dimensions.get("cx"))),
-            height=str(_emu_to_pixel(dimensions.get("cy")))
-        )
+        if dimensions.get('cx') and dimensions.get('cy'):
+            size = documents.Size(
+                width=str(_emu_to_pixel(dimensions.get("cx"))),
+                height=str(_emu_to_pixel(dimensions.get("cy")))
+            )
+        else:
+            size = None
 
         blips = element.find_children("a:graphic") \
             .find_children("a:graphicData") \
